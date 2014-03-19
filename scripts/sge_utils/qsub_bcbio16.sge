@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+# qsub_bcbio.sh working_directory sample_file
+#
+#
+#$ -V
+#$ -pe orte 16
+#$ -M mhofree@ucsd.edu
+#$ -m ea
+#$ -q ngs.q
+## -o /home/sgeadmin/job_log/${JOB_NAME}.${JOB_ID}.out
+#$ -j y
+## -l slots=16
+#$ -N ngs_test_run
+#$ -t 345
+
+WORK_DIR="/home/sgeadmin/projects/cancer_ngs/results/2014_01_09_ngs_stage_2"
+SAMPLE_FILE="/home/sgeadmin/cluster_run/HNSC_list_full.tsv"
+
+KEY_FILE="/home/sgeadmin/projects/cancer_ngs/external/keys/cghub.key"
+RUN_ID=$(( ${SGE_TASK_ID}-1 ))
+
+mkdir -p ${WORK_DIR}
+cd ${WORK_DIR}
+
+bcbio_ngs_tcga_batch.py \
+    -k ${KEY_FILE} \
+    -o ${WORK_DIR} \
+    -s ${SAMPLE_FILE} \
+    -i ${RUN_ID} \
+    -n 16 > log_file.txt 2>&1
