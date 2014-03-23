@@ -35,7 +35,8 @@ def fetch_cghub_file(keyFile,fID,sampleDir):
     cghubRunCmd = "gtdownload -c {keyFile} -d https://cghub.ucsc.edu/cghub/data/analysis/download/{fID} -p {sampleDir} -v"
     cghubRunCmd = cghubRunCmd.format(**locals())
     print "Fetching from CGHUB:", cghubRunCmd
-    retcode = subprocess.call(cghubRunCmd,shell=True)    
+    retcode = subprocess.call(cghubRunCmd,shell=True) 
+    return retcode   
     
 def write_yaml(workDir,patientID,tumorFile,normalFile,tumorID,normalID):
     yamlTxt = \
@@ -78,7 +79,7 @@ details:
 fc_date: {todaysDate}
 fc_name: {patientID}_mutect
 upload:
-    dir: ../../../{patientID}_final
+    dir: /mnt/result/{patientID}_final
     
 """
 #     method: s3
