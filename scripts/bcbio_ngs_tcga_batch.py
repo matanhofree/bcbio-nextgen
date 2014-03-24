@@ -21,7 +21,8 @@ import sys
 import string
 import subprocess
 import getopt
-import datetime 
+import datetime
+from bcbio.pipeline.main import run_main, parse_cl_args
 
 def usage():
     print ("bcbio_ngs_tcga_batch.py\n"
@@ -82,11 +83,6 @@ upload:
     dir: /mnt/result/{patientID}_final
     
 """
-#     method: s3
-#     bucket: ideker-tcga-ngs-results
-#     access_key_id: AKIAJ4CANNBPGD3XQ52A
-#     secret_access_key: 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
-#     reduced_redundancy: false 
 
     zdate = datetime.date.today()
     todaysDate = zdate.strftime('%y%m%d')
@@ -102,13 +98,16 @@ upload:
 def run_ngs_align(configFile,workDir,coresN):
     os.chdir(workDir)
     
-    runcmd = "bcbio_nextgen.py {configFile} -n {coresN} -t local"
-    runcmd = runcmd.format(**locals())
-    print "Running:", runcmd
+#     runcmd = "bcbio_nextgen.py {configFile} -n {coresN} -t local"
+#     runcmd = runcmd.format(**locals())
+#     print "Running:", runcmd
 #    runval = subprocess.call(runcmd,shell=True,stdout = subprocess.PIPE, stderr= subprocess.PIPE)
-    runval = subprocess.call(runcmd,shell=True)
+#     runval = subprocess.call(runcmd,shell=True)
+
+    run_param = [ configFile , '-t' ,'local' ,'-n', coresN ]
+    kwargs = parse_cl_args(run_param)
+    run_main(**kwargs)
     
-    return runval
 
 
 def run_sample(outputdir,keyfile,samplefile,findex,ncores):
@@ -176,7 +175,7 @@ def run_sample(outputdir,keyfile,samplefile,findex,ncores):
             sys.exit(11)
            
     configFile = write_yaml(configDir,patientID,sampleFileFullTumor,sampleFileFullNormal,tumorTCGA,normalTCGA)   
-    result = run_ngs_align(configFile,workDir + os.sep + 'work',ncores)                
+    run_ngs_align(configFile,workDir + os.sep + 'work',ncores)                
     print 'Done: ', patientID      
             
 def main(argv): 
