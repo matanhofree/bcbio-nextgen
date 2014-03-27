@@ -22,6 +22,7 @@ import string
 import subprocess
 import getopt
 import datetime
+import hashlib
 from bcbio.pipeline.main import run_main, parse_cl_args
 
 def usage():
@@ -80,7 +81,7 @@ details:
 fc_date: {todaysDate}
 fc_name: {patientID}_mutect
 upload:
-    dir: /mnt/result/{patientID}_final
+    dir: /mnt/results/{patientID}_final
     
 """
 
@@ -143,6 +144,8 @@ def run_sample(outputdir,keyfile,samplefile,findex,ncores):
     normalFileName = fparam[4]
     tumorTCGA = fparam[5]
     normalTCGA = fparam[6]
+    tumorMD5 = fparam[7]
+    normalMD5 = fparam[8]
     
     workDir = outputdir + os.sep + patientID
     sampleDir = workDir + os.sep + 'inputData'
@@ -161,22 +164,50 @@ def run_sample(outputdir,keyfile,samplefile,findex,ncores):
     
     if not os.path.exists(configDir):
         os.makedirs(configDir)
-    
-    if (not os.path.isfile(sampleFileFullTumor)):    
-        tumorRet = fetch_cghub_file(keyfile,tumorID,sampleDir)
-        if ((tumorRet is not None) or (not os.path.isfile(sampleFileFullTumor))):
-            print "Error: file download error:",tumorRet,sampleFileFullTumor
-            sys.exit(11)
         
-    if (not os.path.isfile(sampleFileFullNormal)):
-        normalRet = fetch_cghub_file(keyfile,normalID,sampleDir)
-        if ((normalRet is not None) or (not os.path.isfile(sampleFileFullNormal))):
-            print "Error: file download error",normalRet,sampleFileFullNormal
-            sys.exit(11)
+    # Download and check file
+    download_file(sampleFileFullTumor,keyfile,tumorID,sampleDir,tumorMD5)
+    download_file(sampleFileFullNormal,keyfile,normalID,sampleDir,normalMD5)
+    
+#     if (not os.path.isfile(sampleFileFullTumor)):    
+#         tumorRet = fetch_cghub_file(keyfile,tumorID,sampleDir)
+#         if ((tumorRet is not None) or (not os.path.isfile(sampleFileFullTumor))):
+#             print "Error: file download error:",tumorRet,sampleFileFullTumor
+#             sys.exit(11)
+#         
+#     if (not os.path.isfile(sampleFileFullNormal)):
+#         normalRet = fetch_cghub_file(keyfile,normalID,sampleDir)
+#         if ((normalRet is not None) or (not os.path.isfile(sampleFileFullNormal))):
+#             print "Error: file download error",normalRet,sampleFileFullNormal
+#             sys.exit(11)
            
     configFile = write_yaml(configDir,patientID,sampleFileFullTumor,sampleFileFullNormal,tumorTCGA,normalTCGA)   
     run_ngs_align(configFile,workDir + os.sep + 'work',ncores)                
     print 'Done: ', patientID      
+    
+def download_file(sampleFile,keyfile,fileID,sampleDir,fileMD5):
+    # Download file if necessary
+    if (not os.path.isfile(sampleFile)):    
+        fileRet = fetch_cghub_file(keyfile,fileID,sampleDir)
+        if ((fileRet is not None) or (not os.path.isfile(sampleFile))):
+            print "Error: file download error:",fileRet,sampleFile
+            sys.exit(11)
+    
+    # Test checksum
+    with open(fileRet,'rb') as fileCheck:
+        # read contents of the file                  
+        md5_returned = hashfile(fileCheck, hashlib.md5())
+        
+    if (md5_returned != fileMD5):
+        print "Failed md5 checksum file download error:", fileRet, sampleFile 
+        sys.exit(12)
+
+def hashfile(afile, hasher, blocksize=65536):
+    buf = afile.read(blocksize)
+    while len(buf) > 0:
+        hasher.update(buf)
+        buf = afile.read(blocksize)
+    return hasher.hexdigest()
             
 def main(argv): 
     outputdir = os.getcwd() + '/results/' 

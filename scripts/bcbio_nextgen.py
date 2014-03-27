@@ -35,8 +35,10 @@ from bcbio.distributed import runfn
 from bcbio.pipeline.main import run_main, parse_cl_args
 from bcbio.server import main as server_main
 from bcbio.provenance import programs
+import pdb
 
-def main(**kwargs):
+
+def main(**kwargs):   
     run_main(**kwargs)
 
 if __name__ == "__main__":
@@ -59,4 +61,5 @@ if __name__ == "__main__":
             workdir, new_kwargs = setup_info
             os.chdir(workdir)
             kwargs.update(new_kwargs)
+        pdb.set_trace()
         main(**kwargs)

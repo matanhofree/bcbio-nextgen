@@ -54,7 +54,7 @@ def extr_sample(samplefile):
         else:
             continue; 
         
-        extrDict[pt] = [ctumor['analysis_id'],normalSet['analysis_id'],ctumor["filename"],normalSet['filename'],ctumor['barcode'],normalSet['barcode']]      
+        extrDict[pt] = [ctumor['analysis_id'],normalSet['analysis_id'],ctumor["filename"],normalSet['filename'],ctumor['barcode'],normalSet['barcode'],ctumor['checksum'],normalSet['checksum']]      
 
     for key,val in extrDict.iteritems():
         print "%s,%s"%(key,",".join(val))    
