@@ -2,8 +2,15 @@
 
 http://bioinformatics.bc.edu/marthlab/FreeBayes
 """
+
+from collections import namedtuple
 import os
 import shutil
+
+try:
+    import vcf
+except ImportError:
+    vcf = None
 
 from bcbio import bam, utils
 from bcbio.distributed.transaction import file_transaction
@@ -11,8 +18,7 @@ from bcbio.pipeline import config_utils
 from bcbio.pipeline.shared import subset_variant_regions
 from bcbio.provenance import do
 from bcbio.variation import annotation, ploidy
-from bcbio.variation.vcfutils import get_paired_bams, is_paired_analysis
-
+from bcbio.variation.vcfutils import get_paired_bams, is_paired_analysis, bgzip_and_index
 
 def region_to_freebayes(region):
     if isinstance(region, (list, tuple)):
@@ -26,7 +32,7 @@ def _freebayes_options_from_config(items, config, out_file, region=None):
     opts += ["--ploidy", str(ploidy.get_ploidy(items, region))]
 
     variant_regions = utils.get_in(config, ("algorithm", "variant_regions"))
-    target = subset_variant_regions(variant_regions, region, out_file)
+    target = subset_variant_regions(variant_regions, region, out_file, items)
     if target:
         if isinstance(target, basestring) and os.path.isfile(target):
             opts += ["--targets", target]
@@ -35,6 +41,11 @@ def _freebayes_options_from_config(items, config, out_file, region=None):
     resources = config_utils.get_resources("freebayes", config)
     if resources.get("options"):
         opts += resources["options"]
+    if "--min-alternate-fraction" not in " ".join(opts) and "-F" not in " ".join(opts):
+        # add minimum reportable allele frequency, for which FreeBayes defaults to 20
+         min_af = float(utils.get_in(config, ("algorithm",
+                                              "min_allele_fraction"),20)) / 100.0
+         opts += ["--min-alternate-fraction", str(min_af)]
     return opts
 
 def run_freebayes(align_bams, items, ref_file, assoc_files, region=None,
@@ -101,6 +112,13 @@ def _run_freebayes_paired(align_bams, items, ref_file, assoc_files,
             freebayes = config_utils.get_program("freebayes", config)
             opts = " ".join(_freebayes_options_from_config(items, config, out_file, region))
             opts += " -f {}".format(ref_file)
+            if "--min-alternate-fraction" not in opts and "-F" not in opts:
+                # add minimum reportable allele frequency
+                # FreeBayes defaults to 20%, but use 10% by default for the
+                # tumor case
+                min_af = float(utils.get_in(paired.tumor_config, ("algorithm",
+                                                                  "min_allele_fraction"),10)) / 100.0
+                opts += " --min-alternate-fraction %s" % min_af
             # NOTE: The first sample name in the vcfsamplediff call is
             # the one supposed to be the *germline* one
 
@@ -116,15 +134,17 @@ def _run_freebayes_paired(align_bams, items, ref_file, assoc_files,
             bam.index(paired.tumor_bam, config)
             bam.index(paired.normal_bam, config)
             do.run(cl.format(**locals()), "Genotyping paired variants with FreeBayes", {})
+    fix_somatic_calls(out_file, config)
     ann_file = annotation.annotate_nongatk_vcf(out_file, align_bams,
                                                assoc_files["dbsnp"], ref_file,
                                                config)
     return ann_file
 
+
 def _move_vcf(orig_file, new_file):
     """Move a VCF file with associated index.
     """
-    for ext in ["", ".idx"]:
+    for ext in ["", ".idx", ".tbi"]:
         to_move = orig_file + ext
         if os.path.exists(to_move):
             shutil.move(to_move, new_file + ext)
@@ -170,3 +190,44 @@ def clean_vcf_output(orig_file, clean_fn, name="clean"):
         _move_vcf(out_file, orig_file)
         with open(out_file, "w") as out_handle:
             out_handle.write("Moved to {0}".format(orig_file))
+
+
+def fix_somatic_calls(in_file, config):
+    """Fix somatic variant output, standardize it to the SOMATIC flag.
+    """
+    if vcf is None:
+        raise ImportError("Require PyVCF for manipulating cancer VCFs")
+
+    # HACK: Needed to replicate the structure used by PyVCF
+    Info = namedtuple('Info', ['id', 'num', 'type', 'desc'])
+    somatic_info = Info(id='SOMATIC', num=0, type='Flag', desc='Somatic event')
+
+    # NOTE: PyVCF will write an uncompressed VCF
+    base, ext = utils.splitext_plus(in_file)
+    name = "somaticfix"
+    out_file = "{0}-{1}{2}".format(base, name, ".vcf")
+
+    if utils.file_exists(in_file):
+        reader = vcf.VCFReader(filename=in_file)
+        # Add info to the header of the reader
+        reader.infos["SOMATIC"] = somatic_info
+
+        with file_transaction(out_file) as tx_out_file:
+            with open(tx_out_file, "wb") as handle:
+                writer = vcf.VCFWriter(handle, template=reader)
+                for record in reader:
+                    # Handle FreeBayes
+                    if "VT" in record.INFO:
+                        if record.INFO["VT"] == "somatic":
+                            record.add_info("SOMATIC", True)
+                        # Discard old record
+                        del record.INFO["VT"]
+
+                    writer.write_record(record)
+
+        # Re-compress the file
+        out_file = bgzip_and_index(out_file, config)
+        _move_vcf(in_file, "{0}.orig".format(in_file))
+        _move_vcf(out_file, in_file)
+        with open(out_file, "w") as out_handle:
+            out_handle.write("Moved to {0}".format(in_file))

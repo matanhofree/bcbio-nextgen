@@ -310,12 +310,14 @@ Variant calling
    multiple options [gatk, freebayes, varscan, samtools,
    gatk-haplotype, cortex, mutect]
 -  ``variant_regions`` BED file of regions to call variants in.
--  ``mark_duplicates`` Identify and remove variants [picard,
-   biobambam, samtools, false]
+-  ``mark_duplicates`` Identify and remove variants [true, false]
+   If true, will perform streaming duplicate marking with `samblaster`_ for
+   paired reads and `biobambam's bammarkduplicates` for single end reads.
 -  ``recalibrate`` Perform base quality score recalibration on the
-   aligned BAM file. [gatk, false]
+   aligned BAM file. Defaults to no recalibration. [false, gatk]
 -  ``realign`` Perform realignment around indels on the aligned BAM
-   file. [gatk, gkno, false]
+   file. Defaults to no realignment since realigning callers like FreeBayes and
+   GATK HaplotypeCaller handle this as part of the calling process. [false, gatk]
 -  ``phasing`` Do post-call haplotype phasing of variants. Defaults to
    no phasing [false, gatk]
 -  ``validate`` A VCF file of expected variant calls to perform
@@ -335,7 +337,18 @@ Variant calling
   reference during variant calling. For tumor/normal paired calling use this to
   supply a panel of normal individuals.
 
-Parallelization
+.. _samblaster: https://github.com/GregoryFaust/samblaster
+.. _biobambam's bammarkduplicates: https://github.com/gt1/biobambam
+
+Cancer variant calling
+======================
+
+- ``min_allele_fraction`` Minimum allele fraction to detect variants in
+  heterogeneous tumor samples, set as the float or integer percentage to
+  resolve (i.e. 10 = alleles in 10% of the sample). Defaults to 10. Specify this
+  in the tumor sample of a tumor/normal pair.
+
+parallelization
 ===============
 
 - ``nomap_split_size`` Unmapped base pair regions required to split
@@ -476,7 +489,7 @@ section of your ``bcbio_system.yaml`` file::
       dir: /path/to/resources/files
 
 .. _Example genome configuration files: https://github.com/chapmanb/bcbio-nextgen/tree/master/config/genomes
-.. _GATK resource bundle: http://www.broadinstitute.org/gsa/wiki/index.php/GATK_resource_bundle
+.. _GATK resource bundle: http://www.broadinstitute.org/gatk/guide/article.php?id=1213
 
 Reference genome files
 ~~~~~~~~~~~~~~~~~~~~~~

@@ -3,10 +3,10 @@
 import collections
 import copy
 
-from bcbio.structural import cn_mops, lumpy
+from bcbio.structural import cn_mops, delly, lumpy
 
-_CALLERS = {"lumpy": lumpy.run}
-_BATCH_CALLERS = {"cn.mops": cn_mops.run}
+_CALLERS = {}
+_BATCH_CALLERS = {"cn.mops": cn_mops.run, "delly": delly.run, "lumpy": lumpy.run}
 
 def _get_svcallers(data):
     svs = data["config"]["algorithm"].get("svcaller")
@@ -32,7 +32,7 @@ def _combine_multiple_svcallers(samples):
     """
     by_bam = collections.defaultdict(list)
     for x in samples:
-        by_bam[x[0]["work_bam"]].append(x[0])
+        by_bam[x[0]["align_bam"]].append(x[0])
     out = []
     for grouped_calls in by_bam.itervalues():
         def orig_svcaller_order(x):
@@ -60,7 +60,7 @@ def run(samples, run_parallel):
                 if svcaller in _BATCH_CALLERS and batch:
                     batches = batch if isinstance(batch, (list, tuple)) else [batch]
                     for b in batches:
-                        to_process[b].append(x)
+                        to_process[(svcaller, b)].append(x)
                 else:
                     to_process[x["name"][-1]] = [x]
         else:

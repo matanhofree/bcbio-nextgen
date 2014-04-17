@@ -3,12 +3,10 @@
 Samples may include multiple lanes, or barcoded subsections of lanes,
 processed together.
 """
-import os
 import copy
-import subprocess
+import os
 
-from bcbio.utils import file_exists
-from bcbio.distributed.transaction import file_transaction
+from bcbio import utils
 from bcbio.log import logger
 from bcbio.pipeline.merge import (combine_fastq_files, merge_bam_files)
 from bcbio.pipeline import config_utils
@@ -39,34 +37,32 @@ def merge_sample(data):
 
 def delayed_bam_merge(data):
     """Perform a merge on previously prepped files, delayed in processing.
+
+    Handles merging of associated split read and discordant files if present
     """
     if data.get("combine"):
         assert len(data["combine"].keys()) == 1
         file_key = data["combine"].keys()[0]
-        in_files = sorted(list(set([data[file_key]] + data["combine"][file_key].get("extras", []))))
+        extras = []
+        for x in data["combine"][file_key].get("extras", []):
+            if isinstance(x, (list, tuple)):
+                extras.extend(x)
+            else:
+                extras.append(x)
+        in_files = sorted(list(set([data[file_key]] + extras)))
         out_file = data["combine"][file_key]["out"]
-        logger.debug("Combining BAM files to %s" % out_file)
-        config = copy.deepcopy(data["config"])
-        config["algorithm"]["save_diskspace"] = False
-        merged_file = merge_bam_files(in_files, os.path.dirname(out_file), config,
-                                      out_file=out_file)
+        for ext in ["-disc", "-sr", ""]:
+            if ext:
+                cur_in_files = list(filter(os.path.exists, (utils.append_stem(f, ext) for f in in_files)))
+                cur_out_file = utils.append_stem(out_file, ext) if len(in_files) > 0 else None
+            else:
+                cur_in_files, cur_out_file = in_files, out_file
+            if cur_out_file:
+                config = copy.deepcopy(data["config"])
+                config["algorithm"]["save_diskspace"] = False
+                merged_file = merge_bam_files(cur_in_files, os.path.dirname(cur_out_file), config,
+                                              out_file=cur_out_file)
         data.pop("region", None)
         data.pop("combine", None)
         data[file_key] = merged_file
-    return [[data]]
-
-# ## General processing
-
-def generate_bigwig(data):
-    """Provide a BigWig coverage file of the sorted alignments.
-    """
-    if data["config"]["algorithm"].get("coverage_bigwig", True):
-        logger.info("Preparing BigWig file %s" % str(data["name"]))
-        bam_file = data["work_bam"]
-        wig_file = "%s.bigwig" % os.path.splitext(bam_file)[0]
-        if not file_exists(wig_file):
-            with file_transaction(wig_file) as tx_file:
-                cl = ["bam_to_wiggle.py", bam_file,
-                      data["config_file"], "--outfile=%s" % tx_file]
-                subprocess.check_call(cl)
     return [[data]]

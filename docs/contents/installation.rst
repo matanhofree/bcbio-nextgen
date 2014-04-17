@@ -35,6 +35,7 @@ requirements:
   installed (the python-dev or python-devel packages).
 - Compilers: gcc and g++.
 - The git version control system (http://git-scm.com/).
+- wget for file retrieval (https://www.gnu.org/software/wget/)
 
 If you're using the ``--nosudo`` option, please see :ref:`isolated-install`
 for additional system requirements needed to bootstrap the full system.
@@ -47,7 +48,7 @@ use ``https://`` globally instead of ``git://``::
 
 The automated installer creates a fully integrated environment that
 allows simultaneous updates of the framework, third party tools and
-biological data. This offer the advantage over manual installation of
+biological data. This offers the advantage over manual installation of
 being able to manage and evolve a consistent analysis environment as
 algorithms continue to evolve and improve. The installer is flexible
 enough to handle both system integrations into standard directories
@@ -69,6 +70,12 @@ variables will help. Fix that with::
     $ unset PYTHONHOME
     $ unset PYTHONPATH
 
+Other import errors
+~~~~~~~~~~~~~~~~~~~
+Having a .pydistutils.cfg file in your home directory can mess with
+where the libraries get installed. If you have this file in your
+home directory, temporarily renaming it to something else may fix
+your installation issue.
 
 .. _isolated-install:
 

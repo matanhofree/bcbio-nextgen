@@ -45,6 +45,8 @@ def organize(dirs, config, run_info_yaml):
         item["dirs"] = dirs
         if "name" not in item:
             item["name"] = ["", item["description"]]
+        elif isinstance("name", basestring):
+            item["name"] = [item["name"], item["description"]]
         item = add_reference_resources(item)
         out.append(item)
     return out
@@ -162,7 +164,7 @@ ALGORITHM_KEYS = set(["platform", "aligner", "bam_clean", "bam_sort",
                       "clinical_reporting", "nomap_split_size",
                       "nomap_split_targets", "ensemble", "background",
                       "disambiguate", "strandedness", "fusion_mode", "min_read_length",
-                      "coverage_depth_min", "coverage_depth_max"] +
+                      "coverage_depth_min", "coverage_depth_max", "min_allele_fraction"] +
                      # back compatibility
                       ["coverage_depth"])
 
@@ -277,6 +279,18 @@ def _check_sample_config(items, in_file):
 
 # ## Read bcbio_sample.yaml files
 
+def _file_to_abs(x, dnames):
+    """Make a file absolute using the supplied base directory choices.
+    """
+    if os.path.isabs(x):
+        return x
+    else:
+        for dname in dnames:
+            normx = os.path.normpath(os.path.join(dname, x))
+            if os.path.exists(normx):
+                return normx
+        raise ValueError("Did not find input file %s in %s" % (x, dnames))
+
 def _normalize_files(item, fc_dir):
     """Ensure the files argument is a list of absolute file names.
     Handles BAM, single and paired end fastq.
@@ -285,12 +299,8 @@ def _normalize_files(item, fc_dir):
     if files:
         if isinstance(files, basestring):
             files = [files]
-        if fc_dir:
-            fastq_dir = flowcell.get_fastq_dir(fc_dir)
-        else:
-            fastq_dir = os.getcwd()
-        files = [x if os.path.isabs(x) else os.path.normpath(os.path.join(fastq_dir, x))
-                 for x in files]
+        fastq_dir = flowcell.get_fastq_dir(fc_dir) if fc_dir else os.getcwd()
+        files = [_file_to_abs(x, [os.getcwd(), fc_dir, fastq_dir]) for x in files]
         _sanity_check_files(item, files)
         item["files"] = files
     return item
@@ -346,15 +356,16 @@ def _run_info_from_yaml(fc_dir, run_info_yaml, config):
             else:
                 raise ValueError("No `description` sample name provided for input #%s" % (i + 1))
         item["description"] = _clean_characters(str(item["description"]))
-        upload = global_config.get("upload", {})
-        # Handle specifying a local directory directly in upload
-        if isinstance(upload, basestring):
-            upload = {"dir": upload}
-        if fc_name and fc_date:
-            upload["fc_name"] = fc_name
-            upload["fc_date"] = fc_date
-        upload["run_id"] = ""
-        item["upload"] = upload
+        if "upload" not in item:
+            upload = global_config.get("upload", {})
+            # Handle specifying a local directory directly in upload
+            if isinstance(upload, basestring):
+                upload = {"dir": upload}
+            if fc_name and fc_date:
+                upload["fc_name"] = fc_name
+                upload["fc_date"] = fc_date
+            upload["run_id"] = ""
+            item["upload"] = upload
         item["algorithm"] = _replace_global_vars(item["algorithm"], global_vars)
         item["algorithm"] = genome.abs_file_paths(item["algorithm"],
                                                   ignore_keys=["variantcaller", "realign", "recalibrate",

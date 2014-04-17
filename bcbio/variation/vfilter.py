@@ -1,4 +1,4 @@
-"""Filtering of genomic variants.
+"""Hard filtering of genomic variants.
 """
 from distutils.version import LooseVersion
 import os
@@ -26,6 +26,8 @@ def hard_w_expression(vcf_file, expression, data, filterext=""):
             cmd = ("{bcftools} filter -O {output_type} {intervals} --soft-filter '+' "
                    "-e '{expression}' -m '+' {vcf_file} > {tx_out_file}")
             do.run(cmd.format(**locals()), "Hard filtering %s with %s" % (vcf_file, expression), data)
+    if out_file.endswith(".vcf.gz"):
+        out_file = vcfutils.bgzip_and_index(out_file, data["config"])
     return out_file
 
 # ## Caller specific
@@ -74,3 +76,21 @@ def _freebayes_hard(in_file, data):
     filters = ("(AF <= 0.5 && (DP < 4 || (DP < 13 && %QUAL < 10))) || "
                "(AF > 0.5 && (DP < 4 && %QUAL < 50))")
     return hard_w_expression(in_file, filters, data)
+
+def gatk_snp_hard(in_file, data):
+    """Perform hard filtering on GATK SNPs using best-practice recommendations.
+    """
+    filters = ["QD < 2.0", "MQ < 40.0", "FS > 60.0",
+               "MQRankSum < -12.5", "ReadPosRankSum < -8.0"]
+    # GATK Haplotype caller (v2.2) appears to have much larger HaplotypeScores
+    # resulting in excessive filtering, so avoid this metric
+    variantcaller = utils.get_in(data, ("config", "algorithm", "variantcaller"), "gatk")
+    if variantcaller not in ["gatk-haplotype"]:
+        filters.append("HaplotypeScore > 13.0")
+    return hard_w_expression(in_file, " || ".join(filters), data, "SNP")
+
+def gatk_indel_hard(in_file, data):
+    """Perform hard filtering on GATK indels using best-practice recommendations.
+    """
+    filters = ["QD < 2.0", "ReadPosRankSum < -20.0", "FS > 200.0"]
+    return hard_w_expression(in_file, " || ".join(filters), data, "INDEL")

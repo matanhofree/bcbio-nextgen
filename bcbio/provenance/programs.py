@@ -38,13 +38,19 @@ _cl_progs = [{"cmd": "bamtofastq", "name": "biobambam",
 def _broad_versioner(type):
     def get_version(config):
         from bcbio import broad
-        runner = broad.runner_from_config(config)
+        try:
+            runner = broad.runner_from_config(config)
+        except ValueError:
+            return ""
         if type == "gatk":
             return runner.get_gatk_version()
         elif type == "picard":
             return runner.get_picard_version("ViewSam")
         elif type == "mutect":
-            runner = broad.runner_from_config(config, "mutect")
+            try:
+                runner = broad.runner_from_config(config, "mutect")
+            except ValueError:
+                return ""
             return runner.get_mutect_version()
         else:
             raise NotImplementedError(type)
@@ -138,7 +144,8 @@ def _get_cl_version(p, config):
         elif p.get("paren_flag"):
             v = _parse_from_parenflag(stdout, p["paren_flag"])
         else:
-            v = stdout.read().strip()
+            lines = [l.strip() for l in stdout.read().split("\n") if l.strip()]
+            v = lines[-1]
     if v.endswith("."):
         v = v[:-1]
     return v

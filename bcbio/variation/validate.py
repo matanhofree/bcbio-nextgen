@@ -11,7 +11,7 @@ import yaml
 
 from bcbio import utils
 from bcbio.bam import callable
-from bcbio.pipeline import config_utils
+from bcbio.pipeline import config_utils, shared
 from bcbio.provenance import do
 from bcbio.variation import validateplot
 
@@ -57,10 +57,12 @@ def compare_to_rm(data):
         work_dir = os.path.join(base_dir, "work")
         out = {"summary": os.path.join(work_dir, "validate-summary.csv"),
                "grading": os.path.join(work_dir, "validate-grading.yaml"),
-               "concordant": os.path.join(work_dir, "%s-ref-eval-concordance.vcf" % sample),
                "discordant": os.path.join(work_dir, "%s-eval-ref-discordance-annotate.vcf" % sample)}
-        if not utils.file_exists(out["concordant"]) or not utils.file_exists(out["grading"]):
+        if not utils.file_exists(out["discordant"]) or not utils.file_exists(out["grading"]):
             bcbio_variation_comparison(val_config_file, base_dir, data)
+        out["concordant"] = filter(os.path.exists,
+                                   [os.path.join(work_dir, "%s-%s-concordance.vcf" % (sample, x))
+                                    for x in ["eval-ref", "ref-eval"]])[0]
         data["validate"] = out
     return [[data]]
 
@@ -101,6 +103,8 @@ def _create_validate_config(vrn_file, rm_file, rm_interval_file, rm_genome,
     ref_call = {"file": str(rm_file), "name": "ref", "type": "grading-ref",
                 "preclean": True, "prep": True, "remove-refcalls": True}
     a_intervals = get_analysis_intervals(data)
+    if a_intervals:
+        a_intervals = shared.remove_lcr_regions(a_intervals, [data])
     if rm_interval_file:
         ref_call["intervals"] = rm_interval_file
     eval_call = {"file": vrn_file, "name": "eval", "remove-refcalls": True}

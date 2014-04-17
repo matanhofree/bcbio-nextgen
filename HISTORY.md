@@ -1,5 +1,25 @@
 ## 0.7.9 (in progress)
 
+- Redo Illumina sequencer integration to be up to date with current
+  code base. Uses external bcl2fastq demultiplexing and new bcbio integrated
+  analysis server. Provide documentation on setting up automated infrastructure.
+- Perform de-duplication of BAM files as part of streaming alignment process
+  using samblaster or biobambam's bammarkduplicates. Removes need for secondary
+  split of files and BAM preparation unless recalibration and realignment
+  needed. Enables pre-processing of input files for structural variant detection.
+- Rework batched regional analysis in variant calling to remove custom cases and
+  simplify structure. Filtering now happens explicitly on the combined batch
+  file. This is functionally equivalent to previous filters but now the workflow
+  is clearer. Avoids special cases for tumor/normal inputs.
+- Perform regional splitting of samples grouped by batch instead of globally,
+  enabling multiple organisms and experiments within a single input sample YAML.
+- Update VQSR support for GATK to be up to date with latest best
+  practices. Re-organize GATK and filtering to be more modular to help with
+  transition to GATK 3.x gVCF approaches.
+- Improve checks for pre-aligned BAMs: ensure correct sample names and
+  provide more context on errors around mismatching reference genomes.
+- GATK HaplotypeCaller: ensure genotype depth annotation with DepthPerSampleHC
+  annotation. Enable GATK 3.1 hardware specific optimizations.
 - Use bgzipped VCFs for dbSNP, Cosmic and other resources to save disk
   space. Upgrade to Cosmic v68.
 
