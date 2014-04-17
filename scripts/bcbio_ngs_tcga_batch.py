@@ -111,7 +111,13 @@ def run_ngs_align(configFile,workDir,coresN):
     
 
 
-def run_sample(outputdir,keyfile,samplefile,findex,ncores):
+def run_sample(runSettings):
+    
+    outputdir = runSettings["outputdir"]
+    keyfile = runSettings["keyfile"]
+    samplefile = runSettings["samplefile"]
+    findex = runSettings["findex"]
+    ncores = runSettings["ncores"] 
     
     if (os.path.isdir(outputdir) == False):
         print "Error: output dir does not exist"
@@ -166,41 +172,47 @@ def run_sample(outputdir,keyfile,samplefile,findex,ncores):
         os.makedirs(configDir)
         
     # Download and check file
-    download_file(sampleFileFullTumor,keyfile,tumorID,sampleDir,tumorMD5)
-    download_file(sampleFileFullNormal,keyfile,normalID,sampleDir,normalMD5)
-    
-#     if (not os.path.isfile(sampleFileFullTumor)):    
-#         tumorRet = fetch_cghub_file(keyfile,tumorID,sampleDir)
-#         if ((tumorRet is not None) or (not os.path.isfile(sampleFileFullTumor))):
-#             print "Error: file download error:",tumorRet,sampleFileFullTumor
-#             sys.exit(11)
-#         
-#     if (not os.path.isfile(sampleFileFullNormal)):
-#         normalRet = fetch_cghub_file(keyfile,normalID,sampleDir)
-#         if ((normalRet is not None) or (not os.path.isfile(sampleFileFullNormal))):
-#             print "Error: file download error",normalRet,sampleFileFullNormal
-#             sys.exit(11)
-           
+    download_file(sampleFileFullTumor,tumorID,sampleDir,tumorMD5,runSettings)
+    download_file(sampleFileFullNormal,normalID,sampleDir,normalMD5,runSettings)
+        
     configFile = write_yaml(configDir,patientID,sampleFileFullTumor,sampleFileFullNormal,tumorTCGA,normalTCGA)   
     run_ngs_align(configFile,workDir + os.sep + 'work',ncores)                
     print 'Done: ', patientID      
     
-def download_file(sampleFile,keyfile,fileID,sampleDir,fileMD5):
+def download_file(sampleFile,fileID,sampleDir,fileMD5,runSettings):
+    keyfile = runSettings["keyfile"]
+    dlretry = runSettings["dlretry"]
+    checkHash = runSettings["checkHash"] 
+    hashPass = not(checkHash)
+
     # Download file if necessary
-    if (not os.path.isfile(sampleFile)):    
-        fileRet = fetch_cghub_file(keyfile,fileID,sampleDir)
-        if ((fileRet is not None) or (not os.path.isfile(sampleFile))):
-            print "Error: file download error:",fileRet,sampleFile
-            sys.exit(11)
-    
-    # Test checksum
-    with open(fileRet,'rb') as fileCheck:
-        # read contents of the file                  
-        md5_returned = hashfile(fileCheck, hashlib.md5())
+    for i in xrange(0,dlretry):
+        if (not os.path.isfile(sampleFile)):            
+            print "Downloading file from CGhub: %s (attempt %d)" % (sampleFile,i)
+            
+            fileRet = fetch_cghub_file(keyfile,fileID,sampleDir)                                
+            if ((fileRet != 0 ) or (not os.path.isfile(sampleFile))):
+                print "Error: file download error:",fileRet,sampleFile
         
-    if (md5_returned != fileMD5):
-        print "Failed md5 checksum file download error:", fileRet, sampleFile 
-        sys.exit(12)
+        if (hashPass == False): # Test hash value
+            # Test checksum
+            with open(sampleFile,'rb') as fileCheck:
+                # read contents of the file                  
+                md5_returned = hashfile(fileCheck, hashlib.md5())
+                
+            if (md5_returned != fileMD5):
+                print "Failed md5 checksum failed: %s %s %s" % (sampleFile, md5_returned, fileMD5)                
+            else:
+                print "MD5 checksum passed"
+                hashPass = True
+                break
+                    
+        # Try to download again
+        fileRet = fetch_cghub_file(keyfile,fileID,sampleDir)                                
+        if ((fileRet != 0 ) or (not os.path.isfile(sampleFile))):
+            print "Error: file download error:",fileRet,sampleFile
+            
+                
 
 def hashfile(afile, hasher, blocksize=65536):
     buf = afile.read(blocksize)
@@ -210,11 +222,16 @@ def hashfile(afile, hasher, blocksize=65536):
     return hasher.hexdigest()
             
 def main(argv): 
-    outputdir = os.getcwd() + '/results/' 
-    findex = 0;
-    samplefile = '';
-    keyfile = ''; 
-    ncores = '8'   
+    
+    runSettings = dict()        
+    runSettings["outputdir"] = os.getcwd() + '/results/' 
+    runSettings["findex"] = 0
+    runSettings["samplefile"] = ''
+    runSettings["keyfile"] = '' 
+    runSettings["ncores"] = '32'
+    runSettings["dlretry"] = 3
+    runSettings["emailOnErr"] = True     
+    runSettings["checkHash"] = True
         
     try:
         opts, args = getopt.getopt(argv, "hi:o:s:k:n:", ["index=", "odir=", "samplefile=", "key=","ncores=" ])
@@ -226,25 +243,30 @@ def main(argv):
             usage()
             sys.exit(1)
         elif opt in ("-i", "--index"):
-            findex = int(arg)
+            runSettings["findex"] = int(arg)
         elif opt in ("-o", "--odir"):
-            outputdir = arg
+            runSettings["outputdir"] = arg
         elif opt in ("-s", "--samplefile"):
-            samplefile = arg
+            runSettings["samplefile"] = arg
         elif opt in ("-k", "--key"):
-            keyfile = arg    
+            runSettings["keyfile"] = arg    
         elif opt in ("-n", "--ncores"):
-            ncores = arg            
+            runSettings["ncores"] = arg            
         else:
             usage()
             sys.exit(3)
    
-    print 'Output dir: ', outputdir
-    print 'Key file: ', keyfile
-    print 'Sample file: ', samplefile
-    print 'Sample index: ', findex
+    print 'Output dir: ', runSettings["outputdir"]
+    print 'Key file: ', runSettings["keyfile"]
+    print 'Sample file: ', runSettings["samplefile"]
+    print 'Sample index: ', runSettings["findex"]
     
-    run_sample(outputdir,keyfile,samplefile,findex,ncores)
+    try:
+        run_sample(runSettings)
+    except:
+        err = sys.exc_info()[0]
+        print err        
+        
 
 
 if __name__ == "__main__":
